@@ -2,18 +2,50 @@ import requests
 import json
 import pandas as pd
 import datetime
+import time
 from datetime import timedelta
 import smtplib
 from email.message import EmailMessage
+from math import sin, cos, sqrt, atan2, radians
+import sys
+import subprocess
+import winsound
+
+
+# sound setting
+frequency = 2500  # Set Frequency To 2500 Hertz
+duration = 10000  # Set Duration To 1000 ms == 1 second
+
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+try:
+    import pgeocode
+except ModuleNotFoundError:
+    print("Installing package")
+    packagesToInstallList = ["pgeocode"]
+    for package in packagesToInstallList:
+        install(package)
+
+
+#####################################################################################################
+# Input Parameters
+
+dist = pgeocode.GeoDistance('IN')
 
 EMAIL_ADDRESS = ''
 EMAIL_PASSWORD = ''
-TO_EMAIL_ADDRESS = [EMAIL_ADDRESS,""]
+TO_EMAIL_ADDRESS = [EMAIL_ADDRESS]
 
 vaccine_type = "Free" # Paid or Free
 vaccine_dose = "available_capacity_dose1"
-list_of_district = [141,145,140,146,147,143,148,149,144,150,142,199,188,195,198,651,652,666]
+list_of_district = [141,145,140,146,147,143,148,149,144,150,142,651,652]
+unwanted_pincodes = [245304,232329,110010]
 
+current_pin = "110092"
+
+# End of Input Parameters
+###################################################################################################
 
 print("Developer: Himanshu Malhotra")
 
@@ -21,9 +53,9 @@ today_date = (datetime.datetime.utcnow()+timedelta(minutes = 330)).date().strfti
 print("Checking from the date ->",today_date)
 
 
-
 def sendEmailFx(html_code):
     print("Sending Email")
+
 
     msg = EmailMessage()
     msg['Subject'] = 'Vaccine Slot Available - By HM'
@@ -33,9 +65,10 @@ def sendEmailFx(html_code):
 
 
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-        smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD) 
+        smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         smtp.send_message(msg)
-
+    # creating a sound
+    winsound.Beep(frequency, duration)
 def fetchVaccineSlot(list_of_district,dose_type,vaccine_type):
     url = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict?district_id={district}&date={today_date}"
 
@@ -66,11 +99,16 @@ def fetchVaccineSlot(list_of_district,dose_type,vaccine_type):
                     temp_dict = {}
                     if((session["min_age_limit"]!=18)):
                         continue
+                    if(center["pincode"] in unwanted_pincodes):
+                        continue
+                    if(session["available_capacity_dose1"]<=1):
+                        continue
                     temp_dict["district_id"] = district
                     temp_dict["center_id"] = center["center_id"]
                     temp_dict["fee_type"] = center["fee_type"]
                     temp_dict["name"] = center["name"]
                     temp_dict["address"] = center["address"]
+                    temp_dict["distance"] = dist.query_postal_code(current_pin, center["pincode"])
                     temp_dict["state_name"] = center["state_name"]
                     temp_dict["district_name"] = center["district_name"]
                     temp_dict["pincode"] = center["pincode"]
@@ -102,7 +140,7 @@ def fetchVaccineSlot(list_of_district,dose_type,vaccine_type):
         print("No Slot Available")
         return(True)
     else:
-        pdf = pd.DataFrame(final_vaccine_list).sort_values(by = [dose_type],ascending = False)
+        pdf = pd.DataFrame(final_vaccine_list).sort_values(by = ["distance",dose_type],ascending = [True,False])
         sendEmailFx(pdf.to_html(index=False,justify = "center"))
         return(False)
 
@@ -120,8 +158,12 @@ while(1):
     counter += 1
     flag = fetchVaccineSlot(list_of_district,vaccine_dose,vaccine_type)
     if(flag == False):
-        break
+        if(counter >=1000):
+            break
+        time.sleep(60)
+        continue
     else:
+        time.sleep(10)
         continue
 
 
