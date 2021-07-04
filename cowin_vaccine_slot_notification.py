@@ -33,16 +33,17 @@ except ModuleNotFoundError:
 
 dist = pgeocode.GeoDistance('IN')
 
-EMAIL_ADDRESS = ''
-EMAIL_PASSWORD = ''
+EMAIL_ADDRESS = '' # Enter your email id and password here, you have to enable this email id also from google setting, if you are using gmail.
+EMAIL_PASSWORD = '' # password of your email id
 TO_EMAIL_ADDRESS = [EMAIL_ADDRESS]
 
-vaccine_type = "Free" # Paid or Free
+vaccine_type = "" # Paid or Free
 vaccine_dose = "available_capacity_dose1"
-list_of_district = [141,145,140,146,147,143,148,149,144,150,142,651,652]
-unwanted_pincodes = [245304,232329,110010]
+list_of_district = [141,145,140,146,147,143,148,149,144,150,142,651,652] # these are set for Delhi - NCR
+unwanted_pincodes = [245304,232329,110010] # This is the set of pincode, that to be excluded in the output
+vaccine_preference = "SPUTNIK V"  #['SPUTNIK V', 'COVAXIN', 'COVISHIELD'] # Type of vaccine to be searched for
 
-current_pin = "110092"
+current_pin = "110092" # your current pin code
 
 # End of Input Parameters
 ###################################################################################################
@@ -55,7 +56,6 @@ print("Checking from the date ->",today_date)
 
 def sendEmailFx(html_code):
     print("Sending Email")
-
 
     msg = EmailMessage()
     msg['Subject'] = 'Vaccine Slot Available - By HM'
@@ -75,15 +75,15 @@ def fetchVaccineSlot(list_of_district,dose_type,vaccine_type):
     final_vaccine_list = []
 
     for district in list_of_district:
-        print("Running for District ->",district)
+        # print("Running for District ->",district)
         final_url = url.format(district = district,today_date = today_date)
         resp = requests.get(final_url).json()
         temp_district_list = []
         for center in resp["centers"]:
             temp_center_list = []
 
-            if(center["fee_type"]!= vaccine_type):
-                continue
+            # if(center["fee_type"]!= vaccine_type):
+            #     continue
 
             flag_18 = False
             flag_dose_available = False
@@ -99,10 +99,13 @@ def fetchVaccineSlot(list_of_district,dose_type,vaccine_type):
                     temp_dict = {}
                     if((session["min_age_limit"]!=18)):
                         continue
+                    if(vaccine_preference != ""):
+                        if(session["vaccine"] != vaccine_preference):
+                            continue
                     if(center["pincode"] in unwanted_pincodes):
                         continue
-                    if(session["available_capacity_dose1"]<=1):
-                        continue
+                    # if(session["available_capacity_dose1"]<=1):
+                    #     continue
                     temp_dict["district_id"] = district
                     temp_dict["center_id"] = center["center_id"]
                     temp_dict["fee_type"] = center["fee_type"]
@@ -141,8 +144,19 @@ def fetchVaccineSlot(list_of_district,dose_type,vaccine_type):
         return(True)
     else:
         pdf = pd.DataFrame(final_vaccine_list).sort_values(by = ["distance",dose_type],ascending = [True,False])
-        sendEmailFx(pdf.to_html(index=False,justify = "center"))
-        return(False)
+        if(pdf['available_capacity_dose1'].sum()==0):
+            print(pdf[['available_capacity_dose1','pincode']])
+            print("No Slot Available!!!!!!!!!!!!!!!!")
+#             print(pdf)
+            return(True)
+        elif(pdf['available_capacity_dose1'].sum()>=3):
+            print(pdf[['available_capacity_dose1','pincode']])
+            sendEmailFx(pdf.to_html(index=False,justify = "center"))
+            return(False)
+        else:
+            print(pdf[['available_capacity_dose1','pincode']])
+            print("Low Slots!!!")
+            return(True)
 
 
 
@@ -158,7 +172,7 @@ while(1):
     counter += 1
     flag = fetchVaccineSlot(list_of_district,vaccine_dose,vaccine_type)
     if(flag == False):
-        if(counter >=1000):
+        if(counter >=1000000):
             break
         time.sleep(60)
         continue
